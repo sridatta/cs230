@@ -104,6 +104,6 @@ ENV/
 data/test/*
 data/dev/*
 data/train/*
-!data/test/.gitkeep 
-!data/dev/.gitkeep 
-!data/train/.gitkeep 
+data/glove.6B/*
+!.gitkeep 
+.DS_Store
