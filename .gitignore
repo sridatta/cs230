@@ -107,3 +107,4 @@ data/train/*
 data/glove.6B/*
 !.gitkeep 
 .DS_Store
+*.npy

@@ -1,0 +1,10 @@
+{
+    "vocab_pad_word": "<PAD>",
+    "vocab_pad_idx": 0,
+    "vocab_unk_word": "<UNK>",
+    "vocab_unk_idx": 1,
+    "vocab_size": 18713,
+    "train_set_size": 60649,
+    "dev_set_size": 12996,
+    "test_set_size": 12997
+}
