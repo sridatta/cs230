@@ -108,3 +108,4 @@ data/glove.6B/*
 !.gitkeep 
 .DS_Store
 *.npy
+logs/*

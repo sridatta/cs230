@@ -10,12 +10,12 @@ def replace_word(w):
         return "<HASHTAG>"
     if w.startswith("@") or w.startswith(".@"):
        return "<MENTION>"
-    return w
+    return w.strip().strip(string.punctuation).lower()
 
 
 def tokenize(text):
     words = text.split()
-    return [replace_word(w).strip().strip(string.punctuation).lower() for w in words]
+    return [replace_word(w) for w in words]
 
 def vocab_as_sorted_list(vocab):
     return [p[0]for p in sorted(vocab.items(), key=lambda p: p[1])]
@@ -29,20 +29,20 @@ def generate_glove_weights(vocab):
     # Get vocab sorted by frequency
     vocab_list = vocab_as_sorted_list(vocab)
     embeddings_index = {}
-    with open("data/glove.6B/glove.6B.50d.txt") as f:
+    with open("data/glove.6B/glove.6B.300d.txt") as f:
         for line in f:
             values = line.split()
             word = values[0]
             coefs = np.asarray(values[1:], dtype='float32')
             embeddings_index[word] = coefs
-    embedding_matrix = np.zeros((len(vocab_list), 50))
+    embedding_matrix = np.zeros((len(vocab_list), 300))
     hits = 0.0
     for i, word in enumerate(vocab_list):
         if word.lower() in embeddings_index:
             hits += 1
             embedding_matrix[i] = embeddings_index[word.lower()]
         else:
-            embedding_matrix[i] = np.random.randn(1, 50)
+            embedding_matrix[i] = np.random.randn(1, 300)
     print("Word hit rate %f" % (hits/len(vocab_list)))
     return embedding_matrix
 

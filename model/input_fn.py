@@ -2,38 +2,32 @@ import tensorflow as tf
 import numpy as np
 from generate_vocab import tokenize
 
-def load_tweets(fname, vocab):
+def pad(arr, length, pad_val):
+    if len(arr) >= length:
+        return arr
+    return arr + [pad_val]*(length - len(arr))
+
+def load_tweets_naive(fname, max_len):
     tweet_arr = np.load(fname)
-    clean_fn = np.vectorize(lambda x: ' '.join(tokenize(x)))
-    tweet_arr = clean_fn(tweet_arr)
-    tweets = tf.data.Dataset.from_tensor_slices(tweet_arr)
-    tweets = (tweets
-                    .map(lambda s: tf.string_split([s]).values)
-                    .map(lambda t: (vocab.lookup(t), tf.size(t))))
-    return tweets
+    len_fn = np.vectorize(lambda x: len(tokenize(x)))
+    tweet_lens = len_fn(tweet_arr)
 
-def load_labels(fname):
+    tweet_arr = np.array([pad(tokenize(x), max_len, "<PAD>") for x in tweet_arr])
+    return tweet_arr, tweet_lens
+
+def load_labels_naive(fname):
     binarize = np.vectorize(lambda x: 1 if x == 1 else 0)
-    data = binarize(np.load(fname)).astype(np.float32)
-    return tf.data.Dataset.from_tensor_slices(data)
+    return binarize(np.load(fname)).astype(np.float32)
 
-def input_fn(mode, tweets, labels, params):
-    is_training = (mode == 'train')
-    buffer_size = params["buffer_size"] if is_training else 1
-    dataset = tf.data.Dataset.zip((tweets, labels))
-    padded_shapes = (
-        (tf.TensorShape([None]), # Pad the tweets
-         tf.TensorShape([])), # Sentence length (scalar)
-        tf.TensorShape([]) # Label (scalar)
-    )
-    dataset = (dataset
-        .shuffle(buffer_size=buffer_size)
-        .padded_batch(params["batch_size"], padded_shapes)
-        .prefetch(1))
-    iterator = dataset.make_initializable_iterator()
-    ((tweets, lengths), labels) = iterator.get_next()
+def make_inputs(vocab, glove_weights, max_len):
+    with tf.name_scope("input"):
+        tweet_input = tf.placeholder(tf.string, [None, max_len], name="tweets")
+        lens_input = tf.placeholder(tf.int64, [None], name="lengths")
+        labels_input = tf.placeholder(tf.float32, [None], name="labels")
     return {
-        'iterator_init_op': iterator.initializer,
-        'tweets': tweets,
-        'lengths': lengths,
-        'labels': labels}
+        "tweets": tweet_input,
+        "lengths": lens_input,
+        "labels": labels_input,
+        "vocab": vocab,
+        'glove_weights': glove_weights
+    }
