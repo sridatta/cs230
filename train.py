@@ -1,12 +1,11 @@
 import tensorflow as tf
 import numpy as np
-from model.input_fn import input_fn
-from model.input_fn import load_labels
-from model.input_fn import load_tweets, load_tweets_naive, load_labels_naive, make_inputs
+from model.input_fn import load_tweets_naive, load_labels_naive, make_inputs
 from generate_vocab import vocab_as_sorted_list
 import json
 import params as params_util
 from model.model_fn import model_fn
+from tqdm import trange
 
 def shuffle_datasets(datasets):
     shuffle_idx = np.random.permutation(len(datasets[0]))
@@ -40,12 +39,15 @@ if __name__ == "__main__":
         num_minibatches = params["train_set_size"] // params["batch_size"]
         writer = tf.summary.FileWriter("logs", sess.graph)
         global_step = tf.train.get_global_step()
-        for _ in range(params["num_epochs"]):
+        for epoch in range(params["num_epochs"]):
+            print("=== Epoch %d ===" % epoch)
             tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([tweets, lens, labels])
 
             # Train the model
+            print("Training...")
             sess.run(train_model['metrics_init_op'])
-            for batch_num in range(num_minibatches):
+            t = trange(num_minibatches)
+            for batch_num in t:
                 feed_dict = {
                     inputs["tweets"]: tweets_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
                     inputs["lengths"]: lens_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
@@ -55,11 +57,10 @@ if __name__ == "__main__":
                     [train_model["train_op"],
                     train_model["loss"],
                     train_model["accuracy"]], feed_dict)
-                if batch_num % 1000 == 0:
-                    print("Minibatch Train Loss: %f" % loss)
-                    print("Minibatch Train Accuracy: %f" % accuracy)
+                t.set_postfix(loss='{:05.3f}'.format(loss), accuracy='{:05.3f}'.format(accuracy))
 
             # Evaluate on dev set
+            print("Evaluating dev set...")
             dev_minibatches = params["dev_set_size"] // params["batch_size"]
             sess.run(eval_model['metrics_init_op'])
             tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([dev_tweets, dev_lens, dev_labels])
