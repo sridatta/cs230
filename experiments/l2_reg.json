@@ -1,0 +1,6 @@
+{
+    "l2_lambda_hparam": {
+        "scale": "log",
+        "range": [-3, 2]
+    }
+}

@@ -109,3 +109,4 @@ data/glove.6B/*
 .DS_Store
 *.npy
 logs/*
+results/*.json

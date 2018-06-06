@@ -1,12 +1,22 @@
 import tensorflow as tf
 
-def build_model(mode, inputs, params):
+def build_model(mode, inputs, params, reuse=False):
     vocab = inputs["vocab"]
-    embeddings = tf.constant(inputs["glove_weights"], tf.float32, name="embedding")
+    if params.get("trainable_weights", False):
+        embeddings = tf.get_variable("embedding", shape=[params["vocab_size"], 300], dtype=tf.float32, initializer=tf.constant_initializer(inputs["glove_weights"]))
+    else:
+        embeddings = tf.constant(inputs["glove_weights"], tf.float32, name="embedding")
     sentence = tf.nn.embedding_lookup(embeddings, vocab.lookup(inputs["tweets"]), name="lookup")
-    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(params["lstm_num_units"])
-    _, state  = tf.nn.dynamic_rnn(lstm_cell, sentence, sequence_length=inputs["lengths"], dtype=tf.float32)
-    logits = tf.layers.dense(state.h, 1) +  tf.constant(1e-8) # Output size 2 = binary classification
+    if params.get("cell_type") == "gru":
+        cell = tf.contrib.rnn.GRUCell(params["lstm_num_units"], reuse=reuse)
+        _, state  = tf.nn.dynamic_rnn(cell, sentence, sequence_length=inputs["lengths"], dtype=tf.float32)
+    else:
+        cell = tf.contrib.rnn.BasicLSTMCell(params["lstm_num_units"], reuse=reuse)
+        _, state_tuple  = tf.nn.dynamic_rnn(cell, sentence, sequence_length=inputs["lengths"], dtype=tf.float32)
+        state = state.c
+
+    reg = tf.contrib.layers.l2_regularizer(params['l2_lambda']) if 'l2_lambda' in params else None
+    logits = tf.layers.dense(state, 1, kernel_regularizer=reg) +  tf.constant(1e-8) # Output size 2 = binary classification
     return logits
 
 def model_fn(mode, inputs, params, reuse=False):
@@ -14,12 +24,12 @@ def model_fn(mode, inputs, params, reuse=False):
     labels = inputs['labels']
     with tf.variable_scope('model', reuse=reuse):
         # Compute the output distribution of the model and the predictions
-        logits = tf.squeeze(build_model(mode, inputs, params))
+        logits = tf.squeeze(build_model(mode, inputs, params, reuse=reuse))
         tf.summary.histogram("logit_summary", logits)
         predictions = tf.nn.sigmoid(logits, name="predictions")
 
     losses = tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=labels)
-    loss = tf.reduce_mean(losses)
+    loss = tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
     accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.equal(labels, 1.0), tf.greater(predictions, 0.5)), tf.float32))
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuracy', accuracy)
