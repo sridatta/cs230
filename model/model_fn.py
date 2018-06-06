@@ -13,7 +13,7 @@ def build_model(mode, inputs, params, reuse=False):
     else:
         cell = tf.contrib.rnn.BasicLSTMCell(params["lstm_num_units"], reuse=reuse)
         _, state_tuple  = tf.nn.dynamic_rnn(cell, sentence, sequence_length=inputs["lengths"], dtype=tf.float32)
-        state = state.c
+        state = state_tuple.c
 
     reg = tf.contrib.layers.l2_regularizer(params['l2_lambda']) if 'l2_lambda' in params else None
     logits = tf.layers.dense(state, 1, kernel_regularizer=reg) +  tf.constant(1e-8) # Output size 2 = binary classification
