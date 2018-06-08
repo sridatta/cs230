@@ -15,9 +15,9 @@ np.random.seed(230)
 shuffle_idx = np.random.permutation(len(data))
 data_shuffled = data.iloc[shuffle_idx]
 
-train = data_shuffled[:int(0.7*len(data))]
-dev = data_shuffled[int(0.7*len(data)):int(0.85*len(data))]
-test = data_shuffled[int(0.85*len(data)):int(len(data))]
+train = data_shuffled[:int(0.8*len(data))]
+dev = data_shuffled[int(0.8*len(data)):int(0.9*len(data))]
+test = data_shuffled[int(0.9*len(data)):int(len(data))]
 
 save_dataset(train, "data/train")
 save_dataset(dev, "data/dev")

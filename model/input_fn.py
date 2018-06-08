@@ -24,10 +24,14 @@ def make_inputs(vocab, glove_weights, max_len):
         tweet_input = tf.placeholder(tf.string, [None, max_len], name="tweets")
         lens_input = tf.placeholder(tf.int64, [None], name="lengths")
         labels_input = tf.placeholder(tf.float32, [None], name="labels")
+        keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+        lambd = tf.placeholder(tf.float32, name="l2_lambda")
     return {
         "tweets": tweet_input,
         "lengths": lens_input,
         "labels": labels_input,
         "vocab": vocab,
-        'glove_weights': glove_weights
+        'glove_weights': glove_weights,
+        "l2_lambda": lambd,
+        "keep_prob": keep_prob
     }

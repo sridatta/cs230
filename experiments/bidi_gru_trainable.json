@@ -1,11 +1,12 @@
 {
     "l2_lambda_hparam": {
         "scale": "log",
-        "range": [-3, 2]
+        "range": [-2, -1]
     },
     "dropout_keep_prob_hparam": {
         "scale": "linear",
-        "range": [0.4, 0.8]
+        "range": [0.5, 0.8]
     },
-    "trainable_weights": false
+    "cell_type": "bidi_gru",
+    "trainable_weights": true
 }

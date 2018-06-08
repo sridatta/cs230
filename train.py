@@ -7,6 +7,9 @@ import params as params_util
 from model.model_fn import model_fn
 from tqdm import trange
 import datetime
+import math
+import os.path
+import os
 
 # Some stupid thing to write np floats to json
 class MyEncoder(json.JSONEncoder):
@@ -26,51 +29,115 @@ def shuffle_datasets(datasets):
 
 def train_loop(inputs, params, train_model, eval_model):
     batch_size = params["batch_size"]
+    train_set_size = params["train_set_size"]
+    dev_set_size = params["dev_set_size"]
+    save_dir = os.path.join(os.getcwd(), "results", params["run_id"])
+    save_path = os.path.join(save_dir, "after-epoch")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     with tf.Session() as sess:
         sess.run(train_model['variable_init_op'])
-        num_minibatches = params["train_set_size"] // params["batch_size"]
-        writer = tf.summary.FileWriter("logs", sess.graph)
+
+        saver = tf.train.Saver()
+        if params.get("restore"):
+            saver.restore(sess, tf.train.latest_checkpoint(save_dir))
+        num_minibatches =  math.ceil(train_set_size / float(batch_size))
         global_step = tf.train.get_global_step()
-        for epoch in range(params["num_epochs"]):
+        start_epoch = params.get("last_epoch", -1) + 1
+
+        train_writer = tf.summary.FileWriter("./logs/"+params["run_id"]+"_train")
+        dev_writer = tf.summary.FileWriter("./logs/"+params["run_id"]+"_dev")
+
+        for epoch in range(start_epoch, start_epoch + params["num_epochs"]):
             print("=== Epoch %d ===" % epoch)
+            params["last_epoch"] = epoch
             tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([tweets, lens, labels])
 
             # Train the model
             print("Training...")
+            train_writer = tf.summary.FileWriter("./logs/train")
             sess.run(train_model['metrics_init_op'])
             t = trange(num_minibatches)
             for batch_num in t:
+                start_idx = batch_num*batch_size
+                end_idx = min((batch_num+1)*batch_size, train_set_size)
                 feed_dict = {
-                    inputs["tweets"]: tweets_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
-                    inputs["lengths"]: lens_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
-                    inputs["labels"]: labels_shuffle[batch_num*batch_size:(batch_num+1)*batch_size]
+                    inputs["tweets"]: tweets_shuffle[start_idx:end_idx],
+                    inputs["lengths"]: lens_shuffle[start_idx:end_idx],
+                    inputs["labels"]: labels_shuffle[start_idx:end_idx],
+                    inputs["keep_prob"]: params["dropout_keep_prob"],
+                    inputs["l2_lambda"]: params["l2_lambda"]
                 }
-                _, _, loss, accuracy = sess.run(
+                _, _, summary, loss, accuracy = sess.run(
                     [train_model["train_op"],
                     train_model["update_metrics"],
+                    train_model["summary_op"],
                     train_model["loss"],
                     train_model["accuracy"]], feed_dict)
+                global_step_val = sess.run(global_step)
+
+                if batch_num % 100 == 0:
+                    train_writer.add_summary(summary, global_step_val)
+                    train_writer.flush()
                 t.set_postfix(loss='{:05.3f}'.format(loss), accuracy='{:05.3f}'.format(accuracy))
             train_metric_values = sess.run({k: v[0] for k, v in train_model["metrics"].items()})
             metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in train_metric_values.items())
             print(metrics_string)
 
             # Evaluate on dev set
-            print("Evaluating dev set...")
-            dev_minibatches = params["dev_set_size"] // params["batch_size"]
+            print("Evaluating train set...")
             sess.run(eval_model['metrics_init_op'])
-            tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([dev_tweets, dev_lens, dev_labels])
-            for batch_num in range(dev_minibatches):
+            tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([tweets, lens, labels])
+            for batch_num in range(num_minibatches):
+                start_idx = batch_num*batch_size
+                end_idx = min((batch_num+1)*batch_size, dev_set_size)
                 feed_dict = {
-                    inputs["tweets"]: tweets_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
-                    inputs["lengths"]: lens_shuffle[batch_num*batch_size:(batch_num+1)*batch_size],
-                    inputs["labels"]: labels_shuffle[batch_num*batch_size:(batch_num+1)*batch_size]
+                    inputs["tweets"]: tweets_shuffle[start_idx:end_idx],
+                    inputs["lengths"]: lens_shuffle[start_idx:end_idx],
+                    inputs["labels"]: labels_shuffle[start_idx:end_idx],
+                    inputs["keep_prob"]: 1.0,
+                    inputs["l2_lambda"]: params["l2_lambda"]
                 }
                 sess.run(eval_model["update_metrics"], feed_dict)
             dev_metric_values = sess.run({k: v[0] for k, v in eval_model["metrics"].items()})
             metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in dev_metric_values.items())
             print(metrics_string)
-        writer.close()
+
+            # Evaluate on dev set
+            print("Evaluating dev set...")
+            dev_minibatches = math.ceil(dev_set_size / float(batch_size))
+            sess.run(eval_model['metrics_init_op'])
+            tweets_shuffle, lens_shuffle, labels_shuffle = shuffle_datasets([dev_tweets, dev_lens, dev_labels])
+            for batch_num in range(dev_minibatches):
+                start_idx = batch_num*batch_size
+                end_idx = min((batch_num+1)*batch_size, dev_set_size)
+                feed_dict = {
+                    inputs["tweets"]: tweets_shuffle[start_idx:end_idx],
+                    inputs["lengths"]: lens_shuffle[start_idx:end_idx],
+                    inputs["labels"]: labels_shuffle[start_idx:end_idx],
+                    inputs["keep_prob"]: 1.0,
+                    inputs["l2_lambda"]: params["l2_lambda"]
+                }
+                sess.run(eval_model["update_metrics"], feed_dict)
+                global_step_val = sess.run(global_step)
+            dev_metric_values = sess.run({k: v[0] for k, v in eval_model["metrics"].items()})
+            for tag, val in dev_metric_values.items():
+                    summ = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=val)])
+                    dev_writer.add_summary(summ, global_step_val)
+                    dev_writer.flush()
+            metrics_string = " ; ".join("{}: {:05.3f}".format(k, v) for k, v in dev_metric_values.items())
+            print(metrics_string)
+            saver.save(sess, save_path, global_step=epoch)
+
+            with open(save_dir + "/results.json", "w") as f:
+                results = {
+                    "train_metrics": train_metric_values,
+                    "dev_metrics": dev_metric_values
+                }
+                json.dump(results, f, cls=MyEncoder, indent=4, separators=(',', ': '))
+            with open(save_dir + "/params.json", "w") as f:
+                json.dump(params, f, cls=MyEncoder, indent=4, separators=(',', ': '))
+
         return train_metric_values, dev_metric_values
 
 def param_sweep(params):
@@ -88,7 +155,6 @@ def param_sweep(params):
         yield ret
 
 if __name__ == "__main__":
-    ts = int(datetime.datetime.utcnow().timestamp())
     params = params_util.load_params()
     tf.set_random_seed(230)
     with open("data/vocab.json") as f:
@@ -108,14 +174,13 @@ if __name__ == "__main__":
     train_model = model_fn("train", inputs, params)
     eval_model = model_fn("eval", inputs, params, reuse=True)
 
-    results = []
-    for p in param_sweep(params):
-        print(p)
-        train_metrics, dev_metrics = train_loop(inputs, p, train_model, eval_model)
-        results.append({
-            "params": p,
-            "train_metrics": train_metrics,
-            "dev_metrics": dev_metrics})
-    output = {"results": results}
-    with open("results/%s_%d.json" % (params["experiment"], ts), "w") as f:
-        json.dump(output, f, cls=MyEncoder, indent=4, separators=(',', ': '))
+    if params.get("restore"):
+        print(params)
+        train_metrics, dev_metrics = train_loop(inputs, params, train_model, eval_model)
+    else:
+        for p in param_sweep(params):
+            ts = int(datetime.datetime.utcnow().timestamp())
+            p["run_id"] = "%s_%d" % (params["experiment"], ts)
+            print(p)
+            train_metrics, dev_metrics = train_loop(inputs, p, train_model, eval_model)
+

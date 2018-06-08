@@ -1,11 +1,13 @@
 {
     "l2_lambda_hparam": {
         "scale": "log",
-        "range": [-3, 2]
+        "range": [0, 3]
     },
     "dropout_keep_prob_hparam": {
         "scale": "linear",
         "range": [0.4, 0.8]
     },
-    "trainable_weights": false
+    "cell_type": "stacked_bigru",
+    "trainable_weights": true,
+    "stacked_units": [128, 64]
 }

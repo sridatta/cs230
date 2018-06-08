@@ -3,10 +3,17 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--experiment', type=str, help='an experiment name to override settings', required=False)
-parser.add_argument('--sweep', type=int, help='number of random hyperparameter sweeps to make', required=False)
+parser.add_argument('--restore', type=str, help='previous run to restore from', required=False)
 args = parser.parse_args()
 
 def load_params():
+    if args.restore:
+       with open("results/"+args.restore+"/params.json") as f:
+           params = json.load(f)
+           params["run_id"] = args.restore
+           params["restore"] = True
+           return params
+
     with open("params.json") as f:
         params = json.load(f)
 
